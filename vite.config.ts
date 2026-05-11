@@ -1,0 +1,150 @@
+import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import fs from "node:fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { defineConfig, Plugin } from "vite";
+import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Plugin to suppress source map errors from node_modules
+const suppressSourceMapErrors = (): Plugin => {
+  return {
+    name: 'suppress-sourcemap-errors',
+    configureServer(server) {
+      // Intercept middleware to filter source map errors
+      server.middlewares.use((req, res, next) => {
+        // Let requests pass through
+        next();
+      });
+      
+      // Override console methods to filter source map errors
+      const originalError = console.error;
+      const originalWarn = console.warn;
+      
+      console.error = (...args: any[]) => {
+        const message = args.join(' ');
+        if (message.includes('[vite] Failed to load source map') || 
+            (message.includes('source map') && message.includes('node_modules'))) {
+          return; // Silently ignore
+        }
+        originalError.apply(console, args);
+      };
+      
+      console.warn = (...args: any[]) => {
+        const message = args.join(' ');
+        if (message.includes('[vite] Failed to load source map') || 
+            (message.includes('source map') && message.includes('node_modules'))) {
+          return; // Silently ignore
+        }
+        originalWarn.apply(console, args);
+      };
+    },
+  };
+};
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), suppressSourceMapErrors()];
+
+const isWindows = process.platform === "win32";
+
+export default defineConfig({
+  base: '/',
+  plugins,
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "client", "src"),
+      "@shared": path.resolve(__dirname, "shared"),
+      "@assets": path.resolve(__dirname, "attached_assets"),
+    },
+  },
+  envDir: __dirname,
+  root: path.resolve(__dirname, "client"),
+  publicDir: path.resolve(__dirname, "client", "public"),
+  build: {
+    outDir: path.resolve(__dirname, "dist/public"),
+    emptyOutDir: true,
+    sourcemap: false, // Disable source maps in build to avoid node_modules issues
+  },
+  server: {
+    host: true,
+    port: 4002,
+    allowedHosts: [
+      ".manuspre.computer",
+      ".manus.computer",
+      ".manus-asia.computer",
+      ".manuscomputer.ai",
+      ".manusvm.computer",
+      "localhost",
+      "127.0.0.1",
+      "176.98.234.178",
+      "medscan.krmu.edu.kz",
+    ],
+    proxy: {
+      "/api": {
+        target: isWindows ? "http://127.0.0.1:4001" : "http://localhost:4003",
+        changeOrigin: true,
+        secure: false,
+        // Важно: передавать cookies через прокси
+        cookieDomainRewrite: "",
+        cookiePathRewrite: "/",
+        // Передавать все заголовки, включая cookies
+        configure: (proxy, _options) => {
+          proxy.on("proxyReq", (proxyReq, req, _res) => {
+            // Логируем cookies в запросе
+            if (req.headers.cookie) {
+              console.log("[Vite Proxy] Cookies in request:", req.headers.cookie.substring(0, 100));
+            }
+          });
+        },
+      },
+    },
+    fs: {
+      strict: true,
+      allow: [
+        path.resolve(__dirname),
+        path.resolve(__dirname, "client"),
+        path.resolve(__dirname, "shared"),
+        path.resolve(__dirname, "attached_assets"),
+        path.resolve(__dirname, "node_modules"),
+      ],
+      deny: ["**/.*"],
+    },
+    hmr: isWindows ? {
+      overlay: false,
+    } : {
+      overlay: false,
+      clientPort: 4001,
+      protocol: 'ws',
+    },
+  },
+  preview: {
+    host: true,
+    port: 4002,
+    allowedHosts: [
+      ".manuspre.computer",
+      ".manus.computer",
+      ".manus-asia.computer",
+      ".manuscomputer.ai",
+      ".manusvm.computer",
+      "localhost",
+      "127.0.0.1",
+      "176.98.234.178",
+      "medscan.krmu.edu.kz",
+    ],
+  },
+  optimizeDeps: {
+    exclude: ["lucide-react"],
+  },
+  // Suppress source map warnings for node_modules
+  esbuild: {
+    sourcemap: false,
+  },
+  // Reduce log level to suppress source map errors (use 'error' to hide warnings)
+  logLevel: 'error',
+  // Disable source maps in dev mode for dependencies
+  css: {
+    devSourcemap: false,
+  },
+});
