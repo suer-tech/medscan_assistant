@@ -21,20 +21,22 @@ export default function NewStudy() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [titleFromUrl, setTitleFromUrl] = useState<string | null>(null);
 
   // Get study ID and type from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
     const type = params.get("type");
-    if (id) {
-      setStudyId(parseInt(id));
-    } else {
-      toast.error("ID исследования не найдено");
+    const title = params.get("title");
+    
+    if (id) setStudyId(parseInt(id));
+    if (type) setStudyType(type);
+    if (title) setTitleFromUrl(title);
+
+    if (!id && !type) {
+      toast.error("Параметры исследования не найдены");
       navigate("/");
-    }
-    if (type) {
-      setStudyType(type);
     }
   }, [navigate]);
 
@@ -125,8 +127,21 @@ export default function NewStudy() {
         const base64 = reader.result as string;
 
         try {
+          let currentStudyId = studyId;
+
+          // Lazy create study record if it doesn't exist yet
+          if (!currentStudyId) {
+            if (!studyType) throw new Error("Не указан тип исследования");
+            const nameBase = titleFromUrl || "Новое исследование";
+            const res = await api.studies.create({
+              title: `${nameBase} - ${new Date().toLocaleDateString("ru-RU")}`,
+              studyType: studyType,
+            });
+            currentStudyId = res.id;
+          }
+
           // Upload image
-          await api.studies.uploadImage(studyId, {
+          await api.studies.uploadImage(currentStudyId, {
             imageData: base64,
             filename: selectedFile.name,
             mimeType: selectedFile.type,
@@ -154,16 +169,16 @@ export default function NewStudy() {
               return;
             }
 
-            await api.studies.analyze(studyId, undefined, includedFields);
+            await api.studies.analyze(currentStudyId, undefined, includedFields);
           } else {
-            await api.studies.analyze(studyId, userQuery.trim() || undefined);
+            await api.studies.analyze(currentStudyId, userQuery.trim() || undefined);
           }
 
           toast.success("Анализ завершен!");
           setIsAnalyzing(false);
 
           // Navigate to study view
-          navigate(`/study/${studyId}`);
+          navigate(`/study/${currentStudyId}`);
         } catch (error: any) {
           setIsUploading(false);
           setIsAnalyzing(false);

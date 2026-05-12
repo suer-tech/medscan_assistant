@@ -1,4 +1,4 @@
-"""Environment configuration"""
+"""Environment configuration (Refreshed by AI)"""
 import os
 from typing import Optional
 from pathlib import Path
@@ -51,6 +51,10 @@ class ENV:
             "BUILT_IN_FORGE_API_KEY",
             ""
         )
+    
+    @property
+    def llm_model(self) -> str:
+        return self._get_env("LLM_MODEL", "openai/gpt-4o-mini")
 
 
 # Global instance

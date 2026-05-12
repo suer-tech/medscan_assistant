@@ -15,29 +15,29 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
       toast.error("Заполните все поля");
       return;
     }
-    
+
     setIsLoading(true);
     try {
       const data = await api.auth.login(email, password);
       console.log("[Login] Login response:", data);
-      
+
       // Обновляем кэш с данными пользователя СРАЗУ
       // Это важно, чтобы ProtectedRoute видел аутентификацию
       if (data?.user) {
         queryClient.setQueryData(["auth", "me"], data.user);
         console.log("[Login] User data set in cache:", data.user);
       }
-      
+
       toast.success("Вход выполнен успешно");
-      
+
       // Переходим на главную страницу СРАЗУ
       // useAuth уже видит пользователя из кэша
       navigate("/");
@@ -60,7 +60,7 @@ export default function Login() {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Medical AI X-Ray
+            МедСкан
           </h1>
           <p className="text-muted-foreground">
             Интеллектуальный анализ рентгеновских снимков
@@ -89,7 +89,7 @@ export default function Login() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="password">Пароль</Label>
                 <Input
@@ -121,7 +121,7 @@ export default function Login() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-muted-foreground">
-          <p>© 2025 Medical AI X-Ray Analysis</p>
+          <p>© 2026 МедСкан</p>
           <p className="mt-1">Профессиональная система для диагностики</p>
         </div>
       </div>

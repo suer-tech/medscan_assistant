@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Save, Download, Loader2, Edit2, Send, MessageSquare,
+  Save, Download, Loader2, Edit2, Send, MessageSquare, X, PanelRightClose, PanelRight,
   CheckCircle2, Clock, Pencil, ShieldAlert, AlertTriangle, ShieldCheck,
   Image as ImageIcon,
 } from "lucide-react";
@@ -28,6 +28,7 @@ const PRIORITY_ICONS = { critical: ShieldAlert, warning: AlertTriangle, normal: 
 export default function StudyDetail({ studyId }: StudyDetailProps) {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [analysisResult, setAnalysisResult] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -36,12 +37,23 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [reviewStatus, setReviewStatusState] = useState<ReviewStatus>("pending_review");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chatViewportRef = useRef<HTMLDivElement>(null);
 
   const { data: study, isLoading } = useQuery({
     queryKey: ["study", studyId],
     queryFn: () => api.studies.get(studyId),
     enabled: !!studyId,
   });
+
+  // ... existing chat query stays outside replace block, it comes later
+
+  useEffect(() => {
+    // Scroll container back to top on studyId change
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: "instant" });
+    }
+  }, [studyId]);
 
   const { data: chatMessages = [], refetch: refetchChat } = useQuery({
     queryKey: ["studyMessages", studyId],
@@ -58,9 +70,32 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
     }
   }, [study, studyId]);
 
+  const prevMsgCountRef = useRef<number>(0);
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatMessages.length > prevMsgCountRef.current && prevMsgCountRef.current > 0) {
+      if (chatViewportRef.current) {
+        chatViewportRef.current.scrollTo({ 
+          top: chatViewportRef.current.scrollHeight,
+          behavior: "smooth" 
+        });
+      }
+    }
+    prevMsgCountRef.current = chatMessages.length;
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (isChatOpen && chatViewportRef.current) {
+      chatViewportRef.current.scrollTo({
+        top: chatViewportRef.current.scrollHeight,
+        behavior: "instant"
+      });
+    }
+  }, [isChatOpen]);
+
+  // Update prev count ref whenever study changes so it resets correctly
+  useEffect(() => {
+    prevMsgCountRef.current = 0;
+  }, [studyId]);
 
   const handleChangeReviewStatus = (status: ReviewStatus) => {
     saveReviewStatus(studyId, status);
@@ -145,10 +180,15 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
   const rCfg = REVIEW_STATUS_CONFIG[reviewStatus];
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar animate-fade-in-up" key={studyId}>
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+    <div className="flex-1 flex h-full min-h-0 overflow-hidden animate-fade-in-up" key={studyId}>
+      {/* Main Content Area */}
+      <div 
+        ref={containerRef}
+        className="flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar" 
+      >
+        <div className="max-w-4xl mx-auto p-6 space-y-6">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <div className={`rounded-full p-1.5 ${pCfg.bgLight}`}>
@@ -176,6 +216,14 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
                 <Button size="sm" onClick={handleDownload} disabled={isDownloading || !study.analysisResult}>
                   {isDownloading ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
                   PDF
+                </Button>
+                <Button 
+                  variant={isChatOpen ? "secondary" : "outline"} 
+                  size="sm" 
+                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  className="hidden md:flex"
+                >
+                  <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Чат с ИИ
                 </Button>
               </>
             ) : (
@@ -259,7 +307,7 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
                 </div>
               </>
             ) : (
-              <ScrollArea className="max-h-[350px] w-full rounded-lg border bg-muted/20 p-4">
+              <div className="w-full rounded-lg border bg-muted/20 p-4">
                 {analysisResult ? (
                   <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm leading-relaxed">
                     {analysisResult}
@@ -267,46 +315,62 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
                 ) : (
                   <p className="text-muted-foreground italic text-sm">Результаты анализа отсутствуют</p>
                 )}
-              </ScrollArea>
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Chat */}
-        <Card className="shadow-sm border-border/60">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" /> Вопросы к ИИ
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col h-[400px] overflow-hidden">
-            <ScrollArea className="flex-1 pr-4 mb-4 min-w-0 overflow-y-auto">
-              <div className="space-y-3 min-w-0 pr-2">
-                {chatMessages.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <MessageSquare className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Задайте вопрос по результатам исследования</p>
-                  </div>
-                ) : (
-                  chatMessages.map((msg: any) => (
-                    <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} min-w-0`}>
-                      <div
-                        className={`max-w-[80%] min-w-0 rounded-xl px-4 py-2.5 ${
-                          msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                        }`}
-                        style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                        <p className="text-[10px] opacity-60 mt-1">
-                          {new Date(msg.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
+        </div>
+      </div>
+
+      {/* Right Sidebar (Chat) */}
+      <div className={`border-l bg-slate-50/50 transition-all duration-300 ease-in-out flex flex-col ${isChatOpen ? "w-[380px]" : "w-0"} overflow-hidden flex-shrink-0`}>
+        <div className="w-[380px] h-full flex flex-col min-h-0">
+          
+          {/* Chat Header */}
+          <div className="px-4 py-3 border-b flex items-center justify-between bg-white flex-shrink-0">
+            <h3 className="font-semibold flex items-center gap-2 text-sm">
+              <MessageSquare className="h-4 w-4" /> Вопросы к ИИ
+            </h3>
+            <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Chat Viewport */}
+          <div 
+            ref={chatViewportRef}
+            className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 flex flex-col"
+          >
+            {chatMessages.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground pb-12">
+                <MessageSquare className="h-12 w-12 mb-3 opacity-20" />
+                <p className="text-sm text-center text-muted-foreground/80 px-6">Задайте вопрос по результатам исследования</p>
+              </div>
+            ) : (
+              <div className="space-y-4 min-w-0">
+                {chatMessages.map((msg: any) => (
+                  <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} min-w-0`}>
+                    <div
+                      className={`max-w-[85%] min-w-0 rounded-2xl px-4 py-2.5 shadow-sm ${
+                        msg.role === "user" ? "bg-primary text-primary-foreground rounded-br-none" : "bg-white border rounded-bl-none"
+                      }`}
+                      style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
+                    >
+                      <p className={`text-sm whitespace-pre-wrap ${msg.role === "user" ? "" : "text-foreground/90"}`}>{msg.content}</p>
+                      <p className={`text-[10px] mt-1 text-right ${msg.role === "user" ? "opacity-70" : "text-muted-foreground"}`}>
+                        {new Date(msg.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
                     </div>
-                  ))
-                )}
+                  </div>
+                ))}
                 <div ref={chatEndRef} />
               </div>
-            </ScrollArea>
+            )}
+          </div>
+
+          {/* Chat Input */}
+          <div className="p-4 border-t bg-white flex-shrink-0">
             <div className="flex gap-2">
               <Textarea
                 value={chatMessage}
@@ -315,21 +379,22 @@ export default function StudyDetail({ studyId }: StudyDetailProps) {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
                 }}
                 placeholder="Задайте вопрос..."
-                className="resize-none text-sm"
-                rows={2}
+                className="resize-none text-sm h-10 min-h-[40px] max-h-[120px] rounded-xl"
+                rows={1}
                 disabled={isSendingMessage}
               />
               <Button
                 onClick={handleSendMessage}
                 disabled={!chatMessage.trim() || isSendingMessage}
                 size="icon"
-                className="h-auto"
+                className="h-10 w-10 rounded-xl flex-shrink-0 shadow-sm"
               >
                 {isSendingMessage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+        </div>
       </div>
     </div>
   );

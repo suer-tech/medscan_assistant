@@ -83,7 +83,7 @@ export default function StudySidebar({
   };
 
   return (
-    <aside className="w-[340px] min-w-[340px] border-r bg-gradient-to-b from-white to-slate-50/80 flex flex-col min-h-0">
+    <aside className="w-[340px] min-w-[340px] h-full border-r bg-gradient-to-b from-white to-slate-50/80 flex flex-col min-h-0">
       {/* Header */}
       <div className="p-4 space-y-3 flex-shrink-0">
         <Button onClick={onCreateStudy} className="w-full h-10 shadow-md hover:shadow-lg transition-shadow font-medium" size="sm">

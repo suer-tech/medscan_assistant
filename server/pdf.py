@@ -139,7 +139,7 @@ def _generate_html(
   </div>
   
   <div class="footer">
-    <p>Документ создан автоматически системой Medical AI X-Ray Analysis</p>
+    <p>Документ создан автоматически системой МедСкан</p>
   </div>
 </body>
 </html>

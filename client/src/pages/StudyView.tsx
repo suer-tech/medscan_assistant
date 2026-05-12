@@ -13,5 +13,9 @@ export default function StudyView() {
     );
   }
 
-  return <StudyDetail studyId={studyId} />;
+  return (
+    <div className="h-full w-full overflow-hidden flex flex-col">
+      <StudyDetail studyId={studyId} />
+    </div>
+  );
 }

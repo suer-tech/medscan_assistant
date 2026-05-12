@@ -7,12 +7,38 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import {
   Microscope, Plus, Loader2,
   ClipboardList, ArrowLeft, ChevronRight,
+  Brain, Bone, Eye, Activity
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { DIRECTIONS, TEMPLATES, Direction, Category, StudyOption } from "@/constants/directions";
 import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { useAppLayout } from "@/components/AppLayout";
+import { motion } from "framer-motion";
+
+const LungsIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M12 2v5" />
+    <path d="M11.5 7C7.5 5 4 6.5 4 11s2 8 4 8 3.5-3.5 3.5-3.5V7Z" />
+    <path d="M12.5 7C16.5 5 20 6.5 20 11s-2 8-4 8-3.5-3.5-3.5-3.5V7Z" />
+  </svg>
+);
+
+const NEW_ORGANS = [
+  { id: "brain", name: "Головной мозг", desc: "МРТ / КТ", icon: Brain },
+  { id: "lungs", name: "Легкие", desc: "Рентген / КТ", icon: LungsIcon },
+  { id: "bone", name: "Опорно-двигательный аппарат", desc: "Рентген / КТ / МРТ", icon: Bone },
+  { id: "eye", name: "Органы зрения", desc: "ОКТ Сетчатки", icon: Eye },
+];
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
@@ -55,21 +81,28 @@ export default function Dashboard() {
         }
         if (studyTitle !== selectedType) break;
       }
-      const result = await createStudyMutation.mutateAsync({
-        title: `${studyTitle} - ${new Date().toLocaleDateString("ru-RU")}`,
-        studyType: selectedType,
-      });
-      toast.success("Исследование создано");
+      
       setIsCreateDialogOpen(false);
       const type = selectedType;
       const templateId = selectedTemplateId;
       resetDialogState();
-      navigate(`/new-study?id=${result.id}${type ? `&type=${type}` : ""}${templateId ? `&templateId=${templateId}` : ""}`);
-    } catch {
-      toast.error("Ошибка при создании исследования");
+      
+      const params = new URLSearchParams();
+      if (type) params.set("type", type);
+      if (templateId) params.set("templateId", templateId);
+      params.set("title", studyTitle);
+      
+      navigate(`/new-study?${params.toString()}`);
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const handleDirectCreate = (organId: string, organName: string) => {
+    const params = new URLSearchParams();
+    params.set("type", organId);
+    params.set("title", organName);
+    navigate(`/new-study?${params.toString()}`);
   };
 
   const resetDialogState = () => {
@@ -131,20 +164,55 @@ export default function Dashboard() {
   return (
     <>
       {/* Empty state — welcome screen */}
-      <div className="h-full flex items-center justify-center bg-gradient-to-br from-background via-accent/10 to-background">
-        <div className="text-center max-w-md animate-fade-in-up">
-          <div className="mb-6 inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5">
-            <Microscope className="h-10 w-10 text-primary/60" />
+      <div className="h-full flex items-start pt-12 justify-center bg-gradient-to-br from-background via-accent/10 to-background overflow-y-auto">
+        <div className="max-w-5xl mx-auto w-full px-4 sm:px-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-slate-800 tracking-tight">
+              Новое исследование
+            </h2>
+            <p className="text-slate-500 mt-1.5">
+              Выберите область загрузки снимков для автоматизированного анализа.
+            </p>
           </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">Выберите исследование</h3>
-          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-            Выберите исследование из списка слева, чтобы просмотреть результаты,
-            или создайте новое для начала анализа.
-          </p>
-          <Button onClick={() => setIsCreateDialogOpen(true)} className="shadow-lg">
-            <Plus className="h-4 w-4 mr-2" />
-            Создать исследование
-          </Button>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            {NEW_ORGANS.map((organ, idx) => {
+              const Icon = organ.icon;
+              return (
+                <motion.button
+                  key={organ.id}
+                  onClick={() => {
+                    if (organ.id === "eye") {
+                      setIsCreateDialogOpen(true);
+                      const ophthalmologyDir = DIRECTIONS.find(d => d.id === "ophthalmology");
+                      if (ophthalmologyDir) handleDirectionSelect(ophthalmologyDir);
+                    } else {
+                      handleDirectCreate(organ.id, organ.name);
+                    }
+                  }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.1, duration: 0.4 }}
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="group relative flex flex-col items-start p-6 rounded-2xl bg-white border border-slate-200 hover:border-blue-300 shadow-sm hover:shadow-md transition-all duration-300 text-left w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-blue-500 rounded-r-md group-hover:h-12 transition-all duration-300 ease-out" />
+                  
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4 text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors duration-300">
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  
+                  <h3 className="text-lg font-semibold text-slate-800 tracking-tight group-hover:text-blue-700 transition-colors mb-1 leading-tight">
+                    {organ.name}
+                  </h3>
+                  <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors line-clamp-2">
+                    {organ.desc}
+                  </p>
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -303,10 +371,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="flex justify-between items-center gap-3 pt-4 border-t">
-            <Button variant="outline" onClick={handleBack} disabled={!currentDirection && !currentCategory && !expandedTemplateCategory && !selectedTemplateId}>
-              <ArrowLeft className="h-4 w-4 mr-2" /> Назад
-            </Button>
+          <div className="flex justify-end items-center gap-3 pt-4 border-t">
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Отмена</Button>
               <Button onClick={handleCreateStudy} disabled={!selectedType || isCreating}>

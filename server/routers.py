@@ -28,7 +28,7 @@ router = APIRouter()
 # Pydantic models for requests/responses
 class StudyCreateInput(BaseModel):
     title: str = Field(..., min_length=1)
-    studyType: str = Field(..., pattern="^(retinal_scan|optic_nerve|macular_analysis|free_query|template_form|ultrasound_thyroid|ultrasound_liver|lab_blood)$")
+    studyType: str = Field(..., pattern="^(retinal_scan|optic_nerve|macular_analysis|free_query|template_form|ultrasound_thyroid|ultrasound_liver|lab_blood|brain|lungs|bone|eye)$")
 
 
 class StudyCreateOutput(BaseModel):
@@ -270,13 +270,22 @@ class StudyAnalyzeInput(BaseModel):
 @router.post("/api/studies/{study_id}/analyze")
 async def studies_analyze(study_id: int, input_data: StudyAnalyzeInput = None, user: dict = Depends(require_user)):
     """Analyze study images"""
+    print(f"\n" + "="*50)
+    print(f"[STEP 1] Получен запрос на анализ: study_id={study_id}, user_id={user['id']}")
+    
     study = await db.get_study_by_id(study_id)
     if not study or study["userId"] != user["id"]:
+        print(f"[ERROR] Исследование не найдено или нет прав доступа")
         raise HTTPException(status_code=403, detail="Forbidden")
+    
+    print(f"[STEP 2] Загружено исследование: тип '{study['studyType']}'")
     
     images = await db.get_study_images(study_id)
     if len(images) == 0:
+        print(f"[ERROR] К исследованию не прикреплено ни одного изображения")
         raise HTTPException(status_code=400, detail="No images uploaded")
+    
+    print(f"[STEP 3] Найдено изображений для анализа: {len(images)}")
     
     # Update status to analyzing
     await db.update_study(study_id, {"status": "analyzing"})
@@ -288,18 +297,22 @@ async def studies_analyze(study_id: int, input_data: StudyAnalyzeInput = None, u
         
         # Analyze the first image
         if template:
+            print(f"[STEP 4] Выбран режим анализа по шаблону (template mode)")
             # Convert Pydantic models to dicts
             template_dicts = [t.dict() if hasattr(t, 'dict') else t for t in template]
             analysis_result = await analyze_template_form(images[0]["url"], template_dicts)
         else:
+            print(f"[STEP 4] Выбран режим стандартного анализа снимка (xray mode)")
             analysis_result = await analyze_xray_image(images[0]["url"], study["studyType"], user_query=user_query)
         
+        print(f"[STEP 7] Ответ получен, обновляем статус в базе данных")
         # Update study with results
         await db.update_study(study_id, {
             "status": "completed",
             "analysisResult": analysis_result,
         })
         
+        print(f"[STEP 8] Анализ успешно завершен!" + "\n" + "="*50)
         return {"success": True, "analysisResult": analysis_result}
     except Exception as error:
         # Log detailed error
@@ -420,6 +433,10 @@ async def studies_send_chat_message(study_id: int, input_data: ChatSendMessageIn
         "retinal_scan": "Сканирование сетчатки",
         "optic_nerve": "Анализ зрительного нерва",
         "macular_analysis": "Анализ макулярной области",
+        "brain": "Головной мозг",
+        "lungs": "Легкие",
+        "bone": "Опорно-двигательный аппарат",
+        "eye": "Органы зрения",
     }
     
     system_prompt = f"""Вы - опытный офтальмолог-консультант. Вы помогаете врачам разобраться в результатах исследований.

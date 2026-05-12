@@ -7,7 +7,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Stethoscope, LogOut, PanelLeftClose, PanelLeft, Loader2 } from "lucide-react";
+import { Microscope, LogOut, PanelLeftClose, PanelLeft, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import StudySidebar from "@/components/StudySidebar";
@@ -112,12 +112,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
               </Button>
 
-              <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-2 rounded-xl">
-                <Stethoscope className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-base font-bold text-foreground tracking-tight leading-none">MedScan AI</h1>
-                <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Анализ медицинских изображений</p>
+              <div 
+                className="flex items-center gap-2 cursor-pointer group" 
+                onClick={() => navigate("/")}
+                title="На главную"
+              >
+                <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-2 rounded-xl group-hover:from-primary/30 transition-colors">
+                  <Microscope className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-foreground tracking-tight leading-none group-hover:text-primary transition-colors">МедСкан</h1>
+                  <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Анализ медицинских изображений</p>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -145,7 +151,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 studies={studies || []}
                 selectedStudyId={selectedStudyId}
                 onSelectStudy={handleSelectStudy}
-                onCreateStudy={() => setRequestCreateDialog(true)}
+                onCreateStudy={() => navigate("/")}
                 onDeleteStudy={(id) => setStudyToDelete(id)}
                 isLoading={studiesLoading}
               />

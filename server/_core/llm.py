@@ -105,7 +105,7 @@ async def invoke_llm(
     _assert_api_key()
     
     payload: Dict[str, Any] = {
-        "model": "openai/gpt-5-mini",
+        "model": env.llm_model,
         "messages": [_normalize_message(msg) for msg in messages],
     }
     
@@ -129,6 +129,9 @@ async def invoke_llm(
     print(f"[LLM] Request to: {api_url}")
     print(f"[LLM] API key present: {bool(api_key)}, key prefix: {api_key[:15]}..." if api_key else "[LLM] API key: NOT SET")
     print(f"[LLM] Payload model: {payload.get('model')}")
+    # Print a cleaner view of user prompts
+    for idx, msg in enumerate(messages):
+        print(f"[LLM-MSG] {msg.get('role')}: {str(msg.get('content'))[:500]}...")
     
     async with httpx.AsyncClient() as client:
         headers = {
@@ -166,7 +169,10 @@ async def invoke_llm(
                     f"LLM invoke failed: {response.status_code} {response.reason_phrase} – {error_message}"
                 )
             
-            return response.json()
+            result_json = response.json()
+            ai_content = result_json.get("choices", [{}])[0].get("message", {}).get("content")
+            print(f"[LLM-RESP] Received success. Snippet: {str(ai_content)[:300]}...")
+            return result_json
         except httpx.HTTPError as e:
             print(f"[LLM] HTTP error: {e}")
             raise ValueError(f"LLM HTTP error: {e}")
