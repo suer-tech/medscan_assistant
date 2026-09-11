@@ -17,12 +17,19 @@ from passlib.hash import pbkdf2_sha256
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ai-env", type=Path)
+    parser.add_argument("--ai-base-url")
+    parser.add_argument("--ai-model")
+    parser.add_argument("--ai-only", action="store_true")
     args = parser.parse_args()
+    if args.ai_only and not args.ai_env:
+        parser.error("--ai-only requires --ai-env")
     root = Path(__file__).resolve().parent.parent
     private = root / ".private"
     private.mkdir(exist_ok=True)
     access_path = private / "medscan-access.json"
-    if access_path.exists():
+    if args.ai_only:
+        access = None
+    elif access_path.exists():
         access = json.loads(access_path.read_text(encoding="utf-8"))
     else:
         password = secrets.token_urlsafe(24)
@@ -34,7 +41,7 @@ def main():
             "jwt_secret": secrets.token_urlsafe(48),
         }
         access_path.write_text(json.dumps(access, indent=2), encoding="utf-8")
-    config = {
+    config = {} if args.ai_only else {
         "NODE_ENV": ("production", False),
         "VITE_APP_ID": ("medscan-assistant", False),
         "MEDSCAN_ADMIN_EMAIL": (access["email"], False),
@@ -49,8 +56,8 @@ def main():
             raise SystemExit("The authorized local file contains no AI key")
         config.update({
             "BUILT_IN_FORGE_API_KEY": (key, True),
-            "BUILT_IN_FORGE_API_URL": (source.get("BUILT_IN_FORGE_API_URL") or "https://openrouter.ai/api", False),
-            "LLM_MODEL": (source.get("LLM_MODEL") or "openai/gpt-4o-mini", False),
+            "BUILT_IN_FORGE_API_URL": (args.ai_base_url or source.get("BUILT_IN_FORGE_API_URL") or "https://routerai.ru/api/v1", False),
+            "LLM_MODEL": (args.ai_model or source.get("LLM_MODEL") or "google/gemini-2.5-flash-lite", False),
         })
     command = shutil.which("npx.cmd") or shutil.which("npx")
     if not command:
@@ -66,7 +73,8 @@ def main():
             # Never forward tool output: it may echo the submitted secret.
             raise SystemExit(f"Failed to configure {name}; no secret output was printed")
         print(f"Configured {name}", flush=True)
-    print(f"Private login details saved locally: {access_path}")
+    if not args.ai_only:
+        print(f"Private login details saved locally: {access_path}")
 
 
 if __name__ == "__main__":

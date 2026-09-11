@@ -29,12 +29,20 @@ Required production/preview variables:
   Passlib PBKDF2-SHA256, 600,000 iterations. There is no built-in demo password.
 - Optional `MEDSCAN_ADMIN_NAME`, `VITE_APP_ID`.
 - For AI: `BUILT_IN_FORGE_API_KEY`, `BUILT_IN_FORGE_API_URL` (default
-  `https://openrouter.ai/api`), `LLM_MODEL` (a vision-capable model).
+  `https://routerai.ru/api/v1`), `LLM_MODEL` (default
+  `google/gemini-2.5-flash-lite`). The completion endpoint is
+  `https://routerai.ru/api/v1/chat/completions`; a versioned base must not
+  acquire a second `/v1`. The implementation follows the
+  [RouterAI quickstart](https://routerai.ru/docs/guides/overview/quickstart)
+  and [vision guide](https://routerai.ru/docs/guides/overview/multimodal/images).
 
 `scripts/configure_vercel.py` creates/stores private local login details in
 `.private/medscan-access.json` and submits secrets via stdin, never command-line
 arguments or stdout. `--ai-env PATH` is an explicit operator action: only use an
 authorized AI account. It imports only AI settings, not the old database or JWT.
+Use `--ai-only --ai-base-url https://routerai.ru/api/v1 --ai-model
+google/gemini-2.5-flash-lite` together with `--ai-env PATH` to update only AI
+configuration without replacing login/session settings.
 Do not commit or upload `.private`, `.env*`, datasets, or runtime data.
 
 ## Verification

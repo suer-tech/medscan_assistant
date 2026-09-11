@@ -81,17 +81,21 @@ def _normalize_message(message: Message) -> Dict[str, Any]:
 
 
 def _resolve_api_url() -> str:
-    """Resolve LLM API URL"""
-    if env.forge_api_url and env.forge_api_url.strip():
-        base = env.forge_api_url.rstrip("/")
-        return f"{base}/v1/chat/completions"
-    return "https://openrouter.ai/api/v1/chat/completions"
+    """Accept an API root, a versioned base, or a full completion endpoint."""
+    base = (env.forge_api_url or "").strip().rstrip("/")
+    if not base:
+        base = "https://routerai.ru/api/v1"
+    if base.endswith("/chat/completions"):
+        return base
+    if base.endswith("/v1"):
+        return f"{base}/chat/completions"
+    return f"{base}/v1/chat/completions"
 
 
 def _assert_api_key():
     """Assert API key is configured"""
     if not env.forge_api_key:
-        raise ValueError("OPENROUTER_API_KEY is not configured")
+        raise ValueError("BUILT_IN_FORGE_API_KEY is not configured")
 
 
 async def invoke_llm(

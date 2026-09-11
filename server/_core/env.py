@@ -57,7 +57,7 @@ class ENV:
     
     @property
     def forge_api_url(self) -> str:
-        return self._get_env("BUILT_IN_FORGE_API_URL", "https://openrouter.ai/api")
+        return self._get_env("BUILT_IN_FORGE_API_URL", "https://routerai.ru/api/v1")
     
     @property
     def forge_api_key(self) -> str:
@@ -68,7 +68,7 @@ class ENV:
     
     @property
     def llm_model(self) -> str:
-        return self._get_env("LLM_MODEL", "openai/gpt-4o-mini")
+        return self._get_env("LLM_MODEL", "google/gemini-2.5-flash-lite")
 
 
 # Global instance
