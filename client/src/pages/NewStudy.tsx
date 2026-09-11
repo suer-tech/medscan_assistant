@@ -10,6 +10,9 @@ import { toast } from "sonner";
 import TemplateFormFields, { TemplateField } from "@/components/TemplateFormFields";
 import { DEFAULT_TEMPLATE_FIELDS } from "@/constants/ostTemplateFields";
 
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const SUPPORTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
 export default function NewStudy() {
   const [, navigate] = useLocation();
   const [studyId, setStudyId] = useState<number | null>(null);
@@ -71,13 +74,18 @@ export default function NewStudy() {
   }, [studyType, templateFields.length]);
 
   const handleFileSelect = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Пожалуйста, выберите изображение");
+    if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+      toast.error("Выберите растровое изображение PNG, JPEG, WebP или GIF");
       return;
     }
 
-    if (file.size > 16 * 1024 * 1024) {
-      toast.error("Размер файла не должен превышать 16 МБ");
+    if (file.size === 0) {
+      toast.error("Файл изображения пуст");
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Размер исходного изображения не должен превышать 3 МБ. Автоматическое уменьшение снимка не выполняется.");
       return;
     }
 
@@ -114,7 +122,7 @@ export default function NewStudy() {
   };
 
   const handleUploadAndAnalyze = async () => {
-    if (!selectedFile || !studyId) return;
+    if (!selectedFile || !studyType) return;
 
     setIsUploading(true);
 
@@ -138,6 +146,7 @@ export default function NewStudy() {
               studyType: studyType,
             });
             currentStudyId = res.id;
+            setStudyId(currentStudyId);
           }
 
           // Upload image
@@ -250,13 +259,13 @@ export default function NewStudy() {
                     <input
                       id="file-input"
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
                       className="hidden"
                       onChange={handleFileInputChange}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Поддерживаемые форматы: JPG, PNG, DICOM. Максимальный размер: 16 МБ
+                    PNG, JPEG, WebP или GIF — до 3 МБ. Снимок загружается без изменения качества и размера. PDF и DICOM не поддерживаются.
                   </p>
                 </div>
               </div>

@@ -1,4 +1,3 @@
-import { createTRPCReact } from "@trpc/react-query";
-import type { AppRouter } from "../../../server/routers";
-
-export const trpc = createTRPCReact<AppRouter>();
+// The application uses the FastAPI REST client in ./api.
+// There is no TypeScript tRPC router; keep this legacy module inert.
+export {};

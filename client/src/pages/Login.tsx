@@ -27,13 +27,11 @@ export default function Login() {
     setIsLoading(true);
     try {
       const data = await api.auth.login(email, password);
-      console.log("[Login] Login response:", data);
 
       // Обновляем кэш с данными пользователя СРАЗУ
       // Это важно, чтобы ProtectedRoute видел аутентификацию
       if (data?.user) {
         queryClient.setQueryData(["auth", "me"], data.user);
-        console.log("[Login] User data set in cache:", data.user);
       }
 
       toast.success("Вход выполнен успешно");
@@ -122,7 +120,7 @@ export default function Login() {
         {/* Footer */}
         <div className="mt-8 text-center text-sm text-muted-foreground">
           <p>© 2026 МедСкан</p>
-          <p className="mt-1">Профессиональная система для диагностики</p>
+          <p className="mt-1">AI-помощник. Результаты требуют проверки специалистом.</p>
         </div>
       </div>
     </div>

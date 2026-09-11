@@ -1,13 +1,22 @@
 """Main API routers"""
 from typing import List, Optional
+import os
+import base64
+import binascii
+import io
+import warnings
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from PIL import Image, UnidentifiedImageError
 # Убрали импорты моделей - теперь используем файловое хранилище
 from server._core.dependencies import get_current_user, require_user
 from server._core.cookies import get_session_cookie_options
 from server._core.const import COOKIE_NAME, ONE_YEAR_MS
-import server.file_storage as db
+if os.getenv("VERCEL") or os.getenv("MEDSCAN_STORAGE") == "postgres":
+    import server.postgres_storage as db
+else:
+    import server.file_storage as db
 # Убрали storage_put - для MVP используем локальное хранилище
 from server.openai import analyze_xray_image, analyze_template_form
 from server.pdf import generate_pdf
@@ -23,6 +32,24 @@ except ImportError:
         return ''.join(secrets.choice(alphabet) for _ in range(size))
 
 router = APIRouter()
+
+
+@router.get("/api/health")
+async def health_check():
+    """Read-only readiness check; no credentials or patient records."""
+    try:
+        if hasattr(db, "health_check"):
+            storage = await db.health_check()
+        else:
+            storage = {"database": "local_json", "persistent": False}
+        from server._core.env import env
+        from server._core.simple_auth import get_simple_user
+        admin_email = os.getenv("MEDSCAN_ADMIN_EMAIL", "")
+        return {"ok": True, **storage, "aiConfigured": bool(env.forge_api_key),
+                "authConfigured": bool(get_simple_user(admin_email))}
+    except Exception as error:
+        print(f"[Health] Readiness failed ({type(error).__name__})")
+        raise HTTPException(status_code=503, detail="Service configuration unavailable")
 
 
 # Pydantic models for requests/responses
@@ -54,13 +81,51 @@ class StudyUpdateInput(BaseModel):
 
 class StudyUploadImageInput(BaseModel):
     imageData: str  # base64
-    filename: str
-    mimeType: str
+    filename: str = Field(..., min_length=1, max_length=255)
+    mimeType: str = Field(..., min_length=1, max_length=32)
 
 
 class StudyUploadImageOutput(BaseModel):
     id: int
     url: str
+
+
+MAX_IMAGE_BYTES = 3 * 1024 * 1024
+IMAGE_FORMAT_MIMES = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp", "GIF": "image/gif"}
+
+
+def validate_study_image(data_url: str, declared_mime: str) -> tuple[bytes, str]:
+    """Validate original raster bytes without resizing or recompressing them."""
+    header, separator, encoded = data_url.partition(",")
+    mime = declared_mime.strip().lower()
+    if mime not in IMAGE_FORMAT_MIMES.values() or separator != "," or header.lower() != f"data:{mime};base64":
+        raise HTTPException(status_code=400, detail="Допустимы только изображения PNG, JPEG, WebP и GIF в формате base64 data URL")
+    if len(encoded) > 4 * ((MAX_IMAGE_BYTES + 2) // 3):
+        raise HTTPException(status_code=413, detail="Размер исходного изображения не должен превышать 3 МБ")
+    try:
+        content = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=400, detail="Некорректные base64-данные изображения") from None
+    if len(content) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Размер исходного изображения не должен превышать 3 МБ")
+    if not content:
+        raise HTTPException(status_code=400, detail="Файл изображения пуст")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(content)) as image:
+                actual_mime = IMAGE_FORMAT_MIMES.get(image.format)
+                if actual_mime != mime:
+                    raise ValueError("Image format does not match its declared MIME type")
+                image.verify()
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise HTTPException(status_code=400, detail="Некорректное или неподдерживаемое растровое изображение") from None
+    return content, mime
+
+
+def study_image_metadata(study_id: int, image: dict) -> dict:
+    """Expose an authenticated image URL; retain data URLs only in storage."""
+    return {**image, "url": f"/api/studies/{study_id}/images/{image['id']}"}
 
 
 class StudyAnalyzeInput(BaseModel):
@@ -121,9 +186,9 @@ async def auth_login(login_data: LoginInput, request: Request):
     """Login with email and password - простой REST API"""
     # Простой парсинг - FastAPI автоматически парсит JSON в LoginInput
     email = login_data.email.strip().lower()
-    password = login_data.password.strip()
+    password = login_data.password
     
-    print(f"[Auth] Login attempt for email: '{email}'")
+    print("[Auth] Login attempt")
     
     # Simple authentication (no database for MVP)
     from server._core.simple_auth import (
@@ -133,10 +198,10 @@ async def auth_login(login_data: LoginInput, request: Request):
     )
     
     # Verify password
-    print(f"[Auth] Verifying password for email: '{email}'")
+    print("[Auth] Verifying password")
     
     if not verify_simple_password(email, password):
-        print(f"[Auth] Password verification failed for email: '{email}'")
+        print("[Auth] Password verification failed")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     # Get user
@@ -169,13 +234,7 @@ async def auth_login(login_data: LoginInput, request: Request):
         **cookie_options
     )
     
-    print(f"[Auth] Cookie set: {COOKIE_NAME}={session_token[:20]}...")
-    print(f"[Auth] Cookie options: {cookie_options}")
-    
-    # Проверяем, что cookie действительно установлен в заголовках
-    set_cookie_header = response_obj.headers.get("set-cookie")
-    print(f"[Auth] Set-Cookie header: {set_cookie_header}")
-    print(f"[Auth] All response headers: {list(response_obj.headers.keys())}")
+    print("[Auth] Login succeeded; session cookie set")
     
     return response_obj
 
@@ -215,7 +274,7 @@ async def studies_get(study_id: int, user: dict = Depends(require_user)):
     images = await db.get_study_images(study_id)
     # Добавляем изображения к исследованию
     result = study.copy()
-    result["images"] = images
+    result["images"] = [study_image_metadata(study_id, image) for image in images]
     # Используем JSONResponse для правильного Content-Length
     return JSONResponse(content=result)
 
@@ -239,21 +298,40 @@ async def studies_upload_image(study_id: int, input_data: StudyUploadImageInput,
     if not study or study["userId"] != user["id"]:
         raise HTTPException(status_code=403, detail="Forbidden")
     
-    # Для MVP используем data URL напрямую (base64)
-    # В production можно сохранять файлы локально или в S3
-    image_url = input_data.imageData  # Используем base64 data URL напрямую
+    image_bytes, image_mime = validate_study_image(input_data.imageData, input_data.mimeType)
+    # Keep the original data URL for AI/PDF; do not return it in JSON responses.
+    image_url = input_data.imageData
     
     # Save metadata to file storage
     image_id = await db.create_study_image({
         "studyId": study_id,
         "fileKey": f"studies/{user['id']}/{study_id}/{generate()}-{input_data.filename}",
-        "url": image_url,  # Используем data URL
+        "url": image_url,
         "filename": input_data.filename,
-        "mimeType": input_data.mimeType,
-        "fileSize": len(input_data.imageData),  # Примерный размер
+        "mimeType": image_mime,
+        "fileSize": len(image_bytes),
     })
     
-    return {"id": image_id, "url": image_url}
+    return {"id": image_id, "url": f"/api/studies/{study_id}/images/{image_id}"}
+
+
+@router.get("/api/studies/{study_id}/images/{image_id}")
+async def studies_get_image(study_id: int, image_id: int, user: dict = Depends(require_user)):
+    """Serve one original raster, authorized through its owning study."""
+    study = await db.get_study_by_id(study_id)
+    if not study:
+        raise HTTPException(status_code=404, detail="Study not found")
+    if study["userId"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    images = await db.get_study_images(study_id)
+    image = next((item for item in images if item["id"] == image_id), None)
+    if image is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    image_bytes, image_mime = validate_study_image(image["url"], image["mimeType"])
+    return Response(content=image_bytes, media_type=image_mime, headers={
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 class TemplateFieldInput(BaseModel):
@@ -315,9 +393,8 @@ async def studies_analyze(study_id: int, input_data: StudyAnalyzeInput = None, u
         print(f"[STEP 8] Анализ успешно завершен!" + "\n" + "="*50)
         return {"success": True, "analysisResult": analysis_result}
     except Exception as error:
-        # Log detailed error
-        error_message = str(error)
-        print(f"[Analyze] Error for study {study_id}: {error_message}")
+        # Upstream errors can contain submitted medical data or credentials.
+        print(f"[Analyze] Error for study {study_id}: {type(error).__name__}")
         
         # Don't save error status if we already have a result (partial success)
         current_study = await db.get_study_by_id(study_id)
@@ -328,15 +405,13 @@ async def studies_analyze(study_id: int, input_data: StudyAnalyzeInput = None, u
             # No result yet, mark as error
             await db.update_study(study_id, {"status": "error"})
         
-        # Return detailed error message
         raise HTTPException(
             status_code=500, 
-            detail=f"Failed to analyze image: {error_message}"
+            detail="Failed to analyze image"
         )
 
 
 class StudyUpdateRequest(BaseModel):
-    id: int
     title: Optional[str] = None
     analysisResult: Optional[str] = None
 
@@ -383,13 +458,16 @@ async def studies_download_pdf(study_id: int, user: dict = Depends(require_user)
     from datetime import datetime
     created_at = datetime.fromisoformat(study["createdAt"].replace("Z", "+00:00"))
     
-    pdf_buffer = await generate_pdf(
-        title=study["title"],
-        study_type=study["studyType"],
-        created_at=created_at,
-        analysis_result=study["analysisResult"],
-        image_url=images[0]["url"] if images else None,
-    )
+    try:
+        pdf_buffer = await generate_pdf(
+            title=study["title"],
+            study_type=study["studyType"],
+            created_at=created_at,
+            analysis_result=study["analysisResult"],
+            image_url=images[0]["url"] if images else None,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
     
     # Convert to base64
     import base64
@@ -478,6 +556,6 @@ async def studies_send_chat_message(study_id: int, input_data: ChatSendMessageIn
         
         return {"success": True, "message": ai_response}
     except Exception as error:
-        print(f"Error in chat: {error}")
+        print(f"Error in chat: {type(error).__name__}")
         raise HTTPException(status_code=500, detail="Failed to get AI response")
 

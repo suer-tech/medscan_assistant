@@ -13,33 +13,19 @@ async def get_current_user(request: Request) -> Optional[Dict[str, Any]]:
         cookies = request.cookies
         session_cookie = cookies.get(COOKIE_NAME)
         
-        print(f"[Auth] get_current_user called for {request.url.path}")
-        print(f"[Auth] Cookies received: {list(cookies.keys())}")
-        print(f"[Auth] Session cookie present: {session_cookie is not None}")
-        
         if session_cookie:
             # Verify session and get user
             session = await sdk.verify_session(session_cookie)
             if session:
-                print(f"[Auth] Session verified, openId: {session.openId}")
                 user = get_user_by_open_id(session.openId)
                 if user:
-                    print(f"[Auth] User found: {user.get('email')}")
                     return user
-                else:
-                    print(f"[Auth] User not found for openId: {session.openId}")
-            else:
-                print(f"[Auth] Session verification failed")
-        else:
-            print(f"[Auth] No session cookie found")
         
         return None
     except HTTPException:
         return None
-    except Exception as e:
-        print(f"[Auth] Error in get_current_user: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        # Fail closed; exceptions may contain session or account details.
         return None
 
 

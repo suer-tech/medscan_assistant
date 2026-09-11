@@ -27,13 +27,7 @@ app.add_middleware(
         "http://127.0.0.1:4001",
         "http://localhost:4002",
         "http://127.0.0.1:4002",
-        "https://ai.teamidea.ru",
-        "http://ai.teamidea.ru",
-        "http://176.98.234.178:4000",
-        "http://176.98.234.178:4001",
-        "http://176.98.234.178:4002",
-        "https://medscan.krmu.edu.kz",
-        "http://medscan.krmu.edu.kz",
+        "https://medscan-assistant.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -45,36 +39,14 @@ app.add_middleware(
 # Request logging middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
-from fastapi.responses import JSONResponse
-import json
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
-        import json
-        
         path = request.url.path
         method = request.method
         
-        # Log request
+        # Log metadata only: request bodies can contain passwords and medical data.
         print(f"\n[Request] {method} {path}")
-        
-        # Read and log body for POST/PUT/PATCH requests
-        if method in ["POST", "PUT", "PATCH"] and path.startswith("/api/"):
-            try:
-                body = await request.body()
-                if body:
-                    try:
-                        body_json = json.loads(body)
-                        print(f"[Request Body] {json.dumps(body_json, indent=2)}")
-                    except:
-                        print(f"[Request Body] {body.decode('utf-8', errors='ignore')[:200]}")
-                    
-                    # Restore body for subsequent handlers
-                    async def receive():
-                        return {"type": "http.request", "body": body}
-                    request._receive = receive
-            except Exception as e:
-                print(f"[Request] Error reading body: {e}")
         
         response = await call_next(request)
         print(f"[Response] {method} {path} -> {response.status_code}")

@@ -197,10 +197,8 @@ async def analyze_xray_image(image_url: str, study_type: StudyType, user_query: 
         print(f"[Analyze] Analysis completed, result length={len(analysis_result)}")
         return analysis_result
     except Exception as error:
-        print(f"[Analyze] Error analyzing image: {type(error).__name__}: {error}")
-        import traceback
-        print(f"[Analyze] Traceback: {traceback.format_exc()}")
-        raise ValueError(f"Failed to analyze image with AI: {error}")
+        print(f"[Analyze] Error analyzing image: {type(error).__name__}")
+        raise ValueError("Failed to analyze image with AI") from None
 
 
 async def analyze_template_form(image_url: str, template: List[dict]) -> str:
@@ -298,10 +296,9 @@ async def analyze_template_form(image_url: str, template: List[dict]) -> str:
                 filled_fields = json.loads(json_match.group())
             else:
                 filled_fields = json.loads(ai_response)
-        except json.JSONDecodeError as e:
-            print(f"[TemplateForm] Failed to parse JSON: {e}")
-            print(f"[TemplateForm] Response was: {ai_response[:500]}")
-            raise ValueError(f"Failed to parse AI response as JSON: {e}")
+        except json.JSONDecodeError:
+            print("[TemplateForm] Failed to parse AI response as JSON")
+            raise ValueError("Failed to parse AI response as JSON") from None
         
         # Merge filled fields with original template
         result_fields = []
@@ -388,8 +385,6 @@ async def analyze_template_form(image_url: str, template: List[dict]) -> str:
         return result_text
         
     except Exception as error:
-        print(f"[TemplateForm] Error analyzing template form: {type(error).__name__}: {error}")
-        import traceback
-        print(f"[TemplateForm] Traceback: {traceback.format_exc()}")
-        raise ValueError(f"Failed to analyze template form with AI: {error}")
+        print(f"[TemplateForm] Error analyzing template form: {type(error).__name__}")
+        raise ValueError("Failed to analyze template form with AI") from None
 

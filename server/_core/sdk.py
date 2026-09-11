@@ -1,7 +1,7 @@
 """SDK for OAuth and JWT authentication"""
 import base64
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import httpx
 from jose import jwt, JWTError
 from fastapi import Request, HTTPException, status
@@ -36,9 +36,6 @@ class OAuthService:
             base_url=base_url,
             timeout=AXIOS_TIMEOUT_MS / 1000,
         )
-        print(f"[OAuth] Initialized with baseURL: {base_url}")
-        if not base_url:
-            print("[OAuth] ERROR: OAUTH_SERVER_URL is not configured!")
     
     def _decode_state(self, state: str) -> str:
         """Decode base64 state"""
@@ -149,7 +146,7 @@ class SDKServer:
         if options is None:
             options = {}
         
-        issued_at = datetime.utcnow()
+        issued_at = datetime.now(timezone.utc)
         expires_in_ms = options.get("expiresInMs", ONE_YEAR_MS)
         expiration = issued_at + timedelta(milliseconds=expires_in_ms)
         secret_key = self._get_session_secret()
@@ -167,7 +164,6 @@ class SDKServer:
     async def verify_session(self, cookie_value: Optional[str]) -> Optional[SessionPayload]:
         """Verify session cookie"""
         if not cookie_value:
-            print("[Auth] Missing session cookie")
             return None
         
         try:
@@ -179,7 +175,6 @@ class SDKServer:
             name = payload.get("name", "")
             
             if not open_id:
-                print("[Auth] Session payload missing openId")
                 return None
             
             # Для простой аутентификации appId может быть пустым
@@ -189,11 +184,8 @@ class SDKServer:
             if not name:
                 name = open_id  # Используем openId как имя, если name не указан
             
-            print(f"[Auth] Session verified: openId={open_id}, appId={app_id or '(empty)'}, name={name}")
-            
             return SessionPayload(open_id, app_id, name)
-        except JWTError as error:
-            print(f"[Auth] Session verification failed: {error}")
+        except JWTError:
             return None
     
     async def get_user_info_with_jwt(self, jwt_token: str) -> GetUserInfoWithJwtResponse:
@@ -233,7 +225,7 @@ class SDKServer:
             )
         
         session_user_id = session.openId
-        signed_in_at = datetime.utcnow()
+        signed_in_at = datetime.now(timezone.utc)
         user = await db_module.get_user_by_open_id(session_user_id)
         
         # If user not in DB, sync from OAuth server
@@ -248,8 +240,7 @@ class SDKServer:
                     "lastSignedIn": signed_in_at,
                 })
                 user = await db_module.get_user_by_open_id(user_info.openId)
-            except Exception as error:
-                print(f"[Auth] Failed to sync user from OAuth: {error}")
+            except Exception:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Failed to sync user info"
